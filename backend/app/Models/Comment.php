@@ -2,23 +2,35 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Comment extends Model
 {
-    use HasFactory;
+    protected $table = 'comments';
+    protected $primaryKey = 'id';
+    public $timestamps = false;
 
-    protected \ = 'ticket_comments';
-    protected \ = ['ticket_id', 'user_id', 'comment', 'is_internal'];
+    protected $fillable = [
+        'ticket_id',
+        'user_id',
+        'comment_text',
+        'is_internal',
+        'created_at',
+    ];
 
-    public function ticket()
+    protected $casts = [
+        'is_internal' => 'boolean',
+        'created_at' => 'datetime',
+    ];
+
+    public function ticket(): BelongsTo
     {
-        return \->belongsTo(Ticket::class);
+        return $this->belongsTo(Ticket::class, 'ticket_id', 'id');
     }
 
-    public function user()
+    public function user(): BelongsTo
     {
-        return \->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 }

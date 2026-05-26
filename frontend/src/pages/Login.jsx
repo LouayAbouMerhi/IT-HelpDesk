@@ -80,8 +80,9 @@ const GlobalStyles = () => (
 );
 
 function Login() {
-  const [email, setEmail] = useState('admin@helpdesk.com');
-  const [password, setPassword] = useState('password123');
+  // Configured default hooks to point smoothly at database testing seed entries
+  const [email, setEmail] = useState('admin@enterprise.com');
+  const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -108,12 +109,20 @@ function Login() {
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
-        window.location.href = '/dashboard';
+        
+        // Securely transition route context states
+        navigate('/dashboard');
       } else {
         setError('Invalid credentials combination response from server.');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Authentication credentials failed.');
+      if (err.response?.data?.errors) {
+        const errorMatrix = err.response.data.errors;
+        const firstKey = Object.keys(errorMatrix)[0];
+        setError(errorMatrix[firstKey][0]);
+      } else {
+        setError(err.response?.data?.message || 'Authentication credentials failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -126,12 +135,11 @@ function Login() {
     setSuccessMessage('');
 
     try {
-      // Connects cleanly to your API endpoint
-      await api.post('/forgot-password', { email: recoveryEmail });
-      setSuccessMessage('If that account exists in our system, a secure password recovery transmission has been dispatched.');
+      const response = await api.post('/forgot-password', { email: recoveryEmail });
+      setSuccessMessage(response.data?.message || 'If that account exists in our system, a secure password recovery link has been dispatched.');
+      setRecoveryEmail('');
     } catch (err) {
-      // Fallback fallback success simulation ensures safe response disclosure matching strict project rules
-      setSuccessMessage('If that account exists in our system, a secure password recovery transmission has been dispatched.');
+      setError(err.response?.data?.message || 'An error occurred while processing the reset sequence.');
     } finally {
       setLoading(false);
     }
@@ -146,7 +154,7 @@ function Login() {
         style={{ background: 'var(--bg)', fontFamily: 'var(--font-body)' }}
       >
         
-        {/* Soft ambient glowing shapes taken straight from the CommandCenter design */}
+        {/* Ambient glowing shapes */}
         <div className="orb-a" style={{ position: 'fixed', top: '-8%', right: '2%', width: 500, height: 500, background: 'radial-gradient(circle, rgba(79,70,229,.07) 0%, transparent 68%)', borderRadius: '50%', zIndex: 0 }} />
         <div className="orb-b" style={{ position: 'fixed', bottom: '-10%', left: '5%', width: 500, height: 500, background: 'radial-gradient(circle, rgba(14,165,233,.06) 0%, transparent 68%)', borderRadius: '50%', zIndex: 0 }} />
 
@@ -283,7 +291,7 @@ function Login() {
                   type="button"
                   onClick={() => { setError(''); setSuccessMessage(''); setIsForgotPasswordMode(false); }}
                   className="w-full text-xs font-bold"
-                  style={{ background: 'var(--bg-2)', color: 'var(--txt-secondary)', py: '10px', borderRadius: '10px', border: '1px solid var(--border)', padding: '9px 0', cursor: 'pointer' }}
+                  style={{ background: 'var(--bg-2)', color: 'var(--txt-secondary)', borderRadius: '10px', border: '1px solid var(--border)', padding: '9px 0', cursor: 'pointer' }}
                 >
                   Return to Login Screen
                 </button>
@@ -291,15 +299,15 @@ function Login() {
             </form>
           )}
 
-          {/* Demo Environment Credentials Footer */}
+          {/* Credentials Footer for Testing Environment */}
           {!isForgotPasswordMode && (
             <div className="mt-8 pt-5 text-center text-[11px]" style={{ borderTop: '1px solid var(--border)' }}>
-              <p className="mb-2 font-semibold" style={{ color: 'var(--txt-muted)' }}>Demo Access Environment:</p>
+              <p className="mb-2 font-semibold" style={{ color: 'var(--txt-muted)' }}>Corporate Access Environment:</p>
               <div 
                 className="inline-block px-3 py-1.5 text-xs tracking-wide"
                 style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--txt-secondary)', fontFamily: 'var(--font-mono)' }}
               >
-                admin@helpdesk.com <span style={{ color: 'var(--border-2)', margin: '0 4px' }}>|</span> password123
+                admin@enterprise.com <span style={{ color: 'var(--border-2)', margin: '0 4px' }}>|</span> password
               </div>
             </div>
           )}

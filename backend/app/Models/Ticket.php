@@ -2,62 +2,65 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Ticket extends Model
 {
-    use HasFactory;
+    protected $table = 'tickets';
+    protected $primaryKey = 'id';
+    public $timestamps = false;
 
     protected $fillable = [
-        'ticket_number',
-        'title',
-        'description',
+        'user_id',
+        'agent_id',
         'category_id',
         'priority_id',
         'status_id',
-        'created_by',
-        'assigned_to',
-        'resolved_at'
+        'title',
+        'description',
+        'created_at',
+        'updated_at',
     ];
 
     protected $casts = [
-        'resolved_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
-    // Relationships
-    public function category()
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
-    public function priority()
+    public function agent(): BelongsTo
     {
-        return $this->belongsTo(Priority::class);
+        return $this->belongsTo(User::class, 'agent_id', 'id');
     }
 
-    public function status()
+    public function category(): BelongsTo
     {
-        return $this->belongsTo(Status::class);
+        return $this->belongsTo(Category::class, 'category_id', 'id');
     }
 
-    public function creator()
+    public function priority(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(Priority::class, 'priority_id', 'id');
     }
 
-    public function assignee()
+    public function status(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'assigned_to');
+        return $this->belongsTo(Status::class, 'status_id', 'id');
     }
 
-    public function comments()
+    public function comments(): HasMany
     {
-        return $this->hasMany(Comment::class);
+        return $this->hasMany(Comment::class, 'ticket_id', 'id');
     }
 
-    public function attachments()
+    public function attachments(): HasMany
     {
-        return $this->hasMany(Attachment::class);
+        return $this->hasMany(Attachment::class, 'ticket_id', 'id');
     }
 }

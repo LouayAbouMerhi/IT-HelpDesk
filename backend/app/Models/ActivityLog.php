@@ -1,23 +1,36 @@
-﻿<?php
+<?php
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ActivityLog extends Model
 {
-    use HasFactory;
+    protected $table = 'activity_logs';
+    protected $primaryKey = 'id';
+    public $timestamps = false;
 
-    protected \ = 'activity_logs';
-    protected \ = ['user_id', 'action', 'model_type', 'model_id', 'properties', 'ip_address', 'user_agent'];
-
-    protected \ = [
-        'properties' => 'array',
+    protected $fillable = [
+        'user_id',
+        'action',
+        'entity_type',
+        'entity_id',
+        'old_value',
+        'new_value',
+        'ip_address',
+        'user_agent',
+        'created_at',
     ];
 
-    public function user()
+    protected $casts = [
+        'old_value' => 'array',
+        'new_value' => 'array',
+        'created_at' => 'datetime',
+    ];
+
+    public function user(): BelongsTo
     {
-        return \->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 }

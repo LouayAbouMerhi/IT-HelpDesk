@@ -2,22 +2,36 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attachment extends Model
 {
-    use HasFactory;
+    protected $table = 'attachments';
+    protected $primaryKey = 'id';
+    public $timestamps = false;
 
-    protected \ = ['ticket_id', 'user_id', 'filename', 'original_filename', 'file_path', 'file_size', 'mime_type'];
+    protected $fillable = [
+        'ticket_id',
+        'comment_id',
+        'file_name',
+        'file_path',
+        'file_size',
+        'file_type',
+        'uploaded_at',
+    ];
 
-    public function ticket()
+    protected $casts = [
+        'uploaded_at' => 'datetime',
+    ];
+
+    public function ticket(): BelongsTo
     {
-        return \->belongsTo(Ticket::class);
+        return $this->belongsTo(Ticket::class, 'ticket_id', 'id');
     }
 
-    public function user()
+    public function comment(): BelongsTo
     {
-        return \->belongsTo(User::class);
+        return $this->belongsTo(Comment::class, 'comment_id', 'id');
     }
 }

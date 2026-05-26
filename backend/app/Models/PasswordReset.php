@@ -1,26 +1,27 @@
-﻿<?php
+<?php
 
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Notification extends Model
+class PasswordReset extends Model
 {
-    protected $table = 'notifications';
+    protected $table = 'password_reset_tokens';
     protected $primaryKey = 'id';
     public $timestamps = false;
 
     protected $fillable = [
         'user_id',
-        'title',
-        'message',
-        'is_read',
+        'token',
+        'expires_at',
+        'used',
         'created_at',
     ];
 
     protected $casts = [
-        'is_read' => 'boolean',
+        'used' => 'boolean',
+        'expires_at' => 'datetime',
         'created_at' => 'datetime',
     ];
 

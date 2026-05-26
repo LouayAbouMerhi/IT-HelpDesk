@@ -1,18 +1,24 @@
-﻿<?php
+<?php
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Priority extends Model
 {
-    use HasFactory;
+    protected $table = 'priorities';
+    protected $primaryKey = 'id';
+    public $timestamps = false;
 
-    protected \ = ['name', 'level', 'color'];
+    protected $fillable = [
+        'name',
+        'color',
+        'level',
+    ];
 
-    public function tickets()
+    public function tickets(): HasMany
     {
-        return \->hasMany(Ticket::class);
+        return $this->hasMany(Ticket::class, 'priority_id', 'id');
     }
 }
