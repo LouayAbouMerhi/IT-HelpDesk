@@ -17,17 +17,17 @@ class User extends Authenticatable implements JWTSubject // <-- Implemented JWT 
     public $timestamps = false;
 
     protected $fillable = [
-        'role_id',
-        'full_name',
+        'roleid',
+        'fullname',
         'email',
-        'password',
+        'passwordhash',
         'phone',
         'department',
         'timezone',
         'is_active',
         'last_login_at',
-        'created_at',
-        'updated_at',
+        'createdat',
+        'updatedat','supervisor_id', 'managed_category_id',
     ];
 
     protected $hidden = [
@@ -53,7 +53,7 @@ class User extends Authenticatable implements JWTSubject // <-- Implemented JWT 
     {
         // Automatically embeds the user role inside the token payload
         return [
-            'role_id' => $this->role_id,
+            'roleid' => $this->roleid,
         ];
     }
 
@@ -61,7 +61,7 @@ class User extends Authenticatable implements JWTSubject // <-- Implemented JWT 
 
     public function role(): BelongsTo
     {
-        return $this->belongsTo(Role::class, 'role_id', 'id');
+        return $this->belongsTo(Role::class, 'roleid', 'id');
     }
 
     public function tickets(): HasMany
@@ -78,4 +78,31 @@ class User extends Authenticatable implements JWTSubject // <-- Implemented JWT 
     {
         return $this->hasMany(ActivityLog::class, 'user_id', 'id');
     }
+
+    // In app/Models/User.php, add these relationships:
+
+public function supervisor(): BelongsTo
+{
+    return $this->belongsTo(User::class, 'supervisor_id', 'id');
+}
+
+public function subordinates(): HasMany
+{
+    return $this->hasMany(User::class, 'supervisor_id', 'id');
+}
+
+// Add accessor for fullname (since database uses full_name)
+
+
+// Add accessor for role (converts role_id to role name)
+public function getRoleAttribute()
+{
+    $roles = [
+        1 => 'Admin',
+        2 => 'Agent',
+        3 => 'User',
+        4 => 'Supervisor'
+    ];
+    return $roles[$this->role_id] ?? 'User';
+}
 }

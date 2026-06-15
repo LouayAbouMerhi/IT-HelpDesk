@@ -1,10 +1,18 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+
+// Page Imports
 import Login from './Pages/Login';
 import Dashboard from './Pages/Dashboard';
-import ResetPassword from './Pages/ResetPassword'; // <-- Imported the new component
+import ResetPassword from './Pages/ResetPassword'; 
+import AgentRoster from './pages/AgentRoster'; 
+import Tickets from './pages/Tickets'; 
+import ActivityLogs from './pages/ActivityLogs';
+import EmployeeDashboard from './pages/EmployeeDashboard';
+import AgentDashboard from './pages/AgentDashboard'; 
+import SupervisorDashboard from './pages/SupervisorDashboard';
 
-// Route Guard to prevent unauthorized dashboard access
+// Route Guard to prevent unauthorized access
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
   if (!token) {
@@ -16,8 +24,31 @@ const ProtectedRoute = ({ children }) => {
 // Route Guard to prevent authenticated users from returning to auth screens
 const PublicRoute = ({ children }) => {
   const token = localStorage.getItem('token');
+  const userStr = localStorage.getItem('user');
+
   if (token) {
-    return <Navigate to="/dashboard" replace />;
+    try {
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        
+        // Use exact database role IDs and string checks for bulletproof routing
+        const rId = String(user.roleid);
+        const rName = (user.role || '').toLowerCase();
+
+        if (rId === '1' || rName === 'admin') {
+          return <Navigate to="/dashboard" replace />;
+        } else if (rId === '4' || rName === 'supervisor') {
+          return <Navigate to="/supervisor-dashboard" replace />;
+        } else if (rId === '2' || rName === 'agent') {
+          return <Navigate to="/agent-workspace" replace />;
+        } else {
+          // If roleid is 3 or unknown, default to standard employee view
+          return <Navigate to="/my-requests" replace />;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse user data in routing", e);
+    }
   }
   return children;
 };
@@ -53,6 +84,64 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/my-requests" 
+            element={
+              <ProtectedRoute>
+                <EmployeeDashboard />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Protected Agent Workspace */}
+          <Route 
+            path="/agent-workspace" 
+            element={
+              <ProtectedRoute>
+                <AgentDashboard />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Protected Supervisor Dashboard */}
+          <Route 
+            path="/supervisor-dashboard" 
+            element={
+              <ProtectedRoute>
+                <SupervisorDashboard />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Protected Incident Tickets Queue */}
+          <Route 
+            path="/tickets" 
+            element={
+              <ProtectedRoute>
+                <Tickets />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Protected Agent Roster / Profile Management */}
+          <Route 
+            path="/roster" 
+            element={
+              <ProtectedRoute>
+                <AgentRoster />
+              </ProtectedRoute>
+            } 
+          />
+
+          <Route 
+            path="/activity-logs" 
+            element={
+              <ProtectedRoute>
+                <ActivityLogs />
               </ProtectedRoute>
             } 
           />

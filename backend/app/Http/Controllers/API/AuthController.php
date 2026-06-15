@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log; 
 use Illuminate\Support\Facades\Mail;
+use App\Mail\ResetPasswordMail;
+
 class AuthController extends Controller
 {
     // ==================== REGISTRATION ====================
@@ -72,7 +74,7 @@ class AuthController extends Controller
             'token' => $token,
             'user' => [
                 'id' => $user->id,
-                'name' => $user->fullname, // Lowercase mapping
+                'name' => $user->fullname, 
                 'email' => $user->email,
                 'role' => 'employee',
                 'department' => $user->department,
@@ -81,7 +83,7 @@ class AuthController extends Controller
         ], 201);
     }
 
-    // ==================== LOGIN ====================
+    // ==================== LOGIN (WITH ATTEMPT LOCKOUT) ====================
     public function login(Request $request)
     {
         $request->validate([
@@ -97,43 +99,83 @@ class AuthController extends Controller
             ]);
         }
 
-        // Check strict lowercase isactive
-        if (isset($user->isactive) && !$user->isactive) {
+        // 1. Check if deactivated
+        $isActive = $user->isactive ?? $user->is_active ?? true;
+        if (!$isActive) {
             throw ValidationException::withMessages([
                 'email' => ['Your account has been deactivated. Please contact an administrator.'],
             ]);
         }
 
-        $dbPassword = $user->password ?? $user->passwordhash ?? null;
-
-        if (!$dbPassword || !Hash::check($request->password, $dbPassword)) {
-            DB::table('activitylogs')->insert([
-                'userid' => null,
-                'action' => 'login_failed',
-                'entitytype' => 'User',
-                'oldvalue' => json_encode(['email' => $request->email]),
-                'ipaddress' => $request->ip(),
-                'useragent' => $request->userAgent(),
-                'createdat' => now(),
-            ]);
-            
+        // 2. Check if locked out
+        $isLocked = $user->is_locked ?? false;
+        if ($isLocked) {
             throw ValidationException::withMessages([
-                'password' => ['The provided credentials are incorrect.'],
+                'email' => ['Account locked due to multiple failed login attempts. Contact an Admin to unlock it.'],
             ]);
         }
 
-        // Generates stateless JWT directly
+        $dbPassword = $user->password ?? $user->passwordhash ?? null;
+
+        // 3. Password Verification
+        if (!$dbPassword || !Hash::check($request->password, $dbPassword)) {
+            
+            $isAdmin = ($user->role === 'admin' || (isset($user->roleid) && (int)$user->roleid === 1));
+
+            if (!$isAdmin) {
+                $attempts = ($user->failed_attempts ?? 0) + 1;
+                $lockAccount = $attempts >= 5;
+
+                DB::table('users')->where('id', $user->id)->update([
+                    'failed_attempts' => $attempts,
+                    'is_locked' => $lockAccount
+                ]);
+
+                DB::table('activitylogs')->insert([
+                    'userid' => $user->id,
+                    'action' => $lockAccount ? 'account_locked' : 'login_failed',
+                    'entitytype' => 'User',
+                    'oldvalue' => json_encode(['email' => $request->email, 'attempt' => $attempts]),
+                    'ipaddress' => $request->ip(),
+                    'useragent' => $request->userAgent(),
+                    'createdat' => now(),
+                ]);
+
+                throw ValidationException::withMessages([
+                    'password' => ["The provided credentials are incorrect. Attempt $attempts of 5."],
+                ]);
+            } else {
+                DB::table('activitylogs')->insert([
+                    'userid' => $user->id,
+                    'action' => 'admin_login_failed',
+                    'entitytype' => 'User',
+                    'ipaddress' => $request->ip(),
+                    'useragent' => $request->userAgent(),
+                    'createdat' => now(),
+                ]);
+
+                throw ValidationException::withMessages([
+                    'password' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+        }
+
+        // 4. Success! Reset attempts and update login time
+        DB::table('users')->where('id', $user->id)->update([
+            'failed_attempts' => 0,
+            'is_locked' => false,
+            'lastloginat' => now()
+        ]);
+
         $token = Auth::guard('api')->fromUser($user);
         
-        // Use strict lowercase roleid
+        // Define role names based on IDs
         $roleName = match((int)$user->roleid) {
             1 => 'admin',
             2 => 'agent',
+            4 => 'supervisor', // Added support for supervisor
             default => 'employee'
         };
-        
-        // Update lowercase lastloginat directly via Query Builder to avoid Eloquent timestamp bugs
-        DB::table('users')->where('id', $user->id)->update(['lastloginat' => now()]);
 
         DB::table('activitylogs')->insert([
             'userid' => $user->id,
@@ -150,11 +192,12 @@ class AuthController extends Controller
             'token' => $token,
             'user' => [
                 'id' => $user->id,
-                'name' => $user->fullname, // Lowercase mapping
+                'name' => $user->fullname ?? $user->name,
                 'email' => $user->email,
                 'role' => $roleName,
-                'department' => $user->department,
-                'profile_photo' => null,
+                'roleid' => (int)$user->roleid, // Ensure frontend receives the raw ID
+                'supervisor_id' => $user->supervisor_id,
+                'managed_category_id' => $user->managed_category_id,
                 'last_login_at' => now(),
             ]
         ]);
@@ -179,18 +222,16 @@ class AuthController extends Controller
             Auth::guard('api')->logout();
         }
 
-        return response()->json([
-            'message' => 'Logged out successfully'
-        ]);
+        return response()->json(['message' => 'Logged out successfully']);
     }
 
-    // ==================== FORGOT PASSWORD ====================
     // ==================== FORGOT PASSWORD ====================
     public function forgotPassword(Request $request)
     {
         $request->validate(['email' => 'required|email']);
 
         $user = User::where('email', $request->email)->first();
+        
         if (!$user) {
             return response()->json(['message' => 'If the email exists in our system, we have sent a password reset link.']);
         }
@@ -207,25 +248,14 @@ class AuthController extends Controller
             'createdat' => now(),
         ]);
 
-        // Build the link back to your React frontend URL
-        $resetLink = 'http://localhost:5173/reset-password?token=' . $token . '&email=' . urlencode($request->email);
+        try {
+            Mail::to($request->email)->send(new ResetPasswordMail($token, $request->email));
+        } catch (\Exception $e) {
+            Log::error('Failed to send email: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to send reset email. Please try again later.'], 500);
+        }
 
-        // Send the actual email
-        Mail::send([], [], function ($message) use ($request, $resetLink) {
-            $message->to($request->email)
-                    ->subject('Password Reset Request - IT CommandCenter')
-                    ->html("
-                        <h2>Password Reset Request</h2>
-                        <p>We received a request to reset the password for your IT HelpDesk account.</p>
-                        <p>Click the link below to securely set a new password:</p>
-                        <p><a href='{$resetLink}' style='display:inline-block;padding:10px 20px;background:#4f46e5;color:#fff;text-decoration:none;border-radius:5px;'>Reset My Password</a></p>
-                        <p>If you did not request this, please ignore this email. This link will expire in 60 minutes.</p>
-                    ");
-        });
-
-        return response()->json([
-            'message' => 'If the email exists in our system, we have sent a password reset link.'
-        ]);
+        return response()->json(['message' => 'If the email exists in our system, we have sent a password reset link.']);
     }
 
     // ==================== RESET PASSWORD ====================
@@ -279,7 +309,6 @@ class AuthController extends Controller
             'name' => $user->fullname,
             'email' => $user->email,
             'role' => $roleName,
-            
             'phone' => $user->phone,
             'profile_photo' => null,
             'timezone' => $user->timezone ?? 'UTC',
@@ -334,9 +363,7 @@ class AuthController extends Controller
             'createdat' => now(),
         ]);
 
-        return response()->json([
-            'message' => 'Profile updated successfully'
-        ]);
+        return response()->json(['message' => 'Profile updated successfully']);
     }
 
     // ==================== CHANGE PASSWORD ====================
@@ -373,23 +400,93 @@ class AuthController extends Controller
             'createdat' => now(),
         ]);
 
-        return response()->json([
-            'message' => 'Password changed successfully'
-        ]);
+        return response()->json(['message' => 'Password changed successfully']);
     }
 
     // ==================== GET ACTIVITY LOGS ====================
+    // ==================== GET ACTIVITY LOGS ====================
     public function getActivityLogs(Request $request)
     {
-        $user = $request->user();
-        $isAdmin = ((int)$user->roleid === 1);
+        try {
+            $user = $request->user();
+            
+            // Admins and Supervisors see everything. Normal users see only their own logs.
+            $isManagement = in_array($user->role, ['Admin', 'Supervisor']) || (int)$user->roleid === 1;
 
-        $query = DB::table('activitylogs')->orderBy('createdat', 'desc');
+            $query = DB::table('activity_logs')
+                ->leftJoin('users', 'activity_logs.user_id', '=', 'users.id')
+                ->select(
+                    'activity_logs.*',
+                    'users.fullname as user_name',
+                    'users.role as user_role'
+                )
+                ->orderBy('activity_logs.created_at', 'desc');
+            
+            if (!$isManagement) {
+                $query->where('activity_logs.user_id', $user->id);
+            }
+
+            // Pagination ensures the system doesn't crash when logs reach 10,000+ rows
+            return response()->json($query->paginate(100));
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Activity Log Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to retrieve logs'], 500);
+        }
+    }
+
+    // ==================== ADMIN: DEACTIVATE USER ====================
+    public function toggleActive($id)
+    {
+        // 1. MUST use the User Model, not DB::table, so it casts types correctly
+        $user = \App\Models\User::find($id);
         
-        if (!$isAdmin) {
-            $query->where('userid', $user->id);
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
         }
 
-        return response()->json($query->paginate(50));
+        // 2. Safely check which column your database actually uses
+        $columnName = null;
+        if (array_key_exists('isactive', $user->getAttributes())) {
+            $columnName = 'isactive';
+        } elseif (array_key_exists('is_active', $user->getAttributes())) {
+            $columnName = 'is_active';
+        }
+
+        if (!$columnName) {
+            return response()->json(['message' => 'Activation column missing in database.'], 500);
+        }
+
+        // 3. Force it into a strict boolean and invert it
+        $currentStatus = (bool) $user->$columnName;
+        $newStatus = !$currentStatus;
+
+        // 4. Save and return the exact new status to the frontend
+        $user->$columnName = $newStatus;
+        $user->save();
+
+        return response()->json([
+            'message' => $newStatus ? 'Account Reactivated!' : 'Account Deactivated!',
+            'new_status' => $newStatus 
+        ]);
+    }
+
+    // ==================== ADMIN: UNLOCK ACCOUNT ====================
+    public function unlockAccount(Request $request, $id)
+    {
+        $request->validate([
+            'new_password' => 'required|min:6'
+        ]);
+
+        $passwordColumn = \Schema::hasColumn('users', 'password') ? 'password' : 'passwordhash';
+
+        DB::table('users')->where('id', $id)->update([
+            'is_locked' => false,
+            'failed_attempts' => 0,
+            $passwordColumn => Hash::make($request->new_password),
+            'updatedat' => now()
+        ]);
+
+        return response()->json(['message' => 'Account unlocked and password reset successfully.']);
     }
 }

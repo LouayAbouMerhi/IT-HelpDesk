@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -80,7 +80,6 @@ const GlobalStyles = () => (
 );
 
 function Login() {
-  // Configured default hooks to point smoothly at database testing seed entries
   const [email, setEmail] = useState('admin@enterprise.com');
   const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
@@ -88,7 +87,6 @@ function Login() {
   const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
 
-  // Forgot password flow handlers
   const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
 
@@ -107,11 +105,27 @@ function Login() {
       const response = await api.post('/login', { email, password });
       
       if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        
-        // Securely transition route context states
-        navigate('/dashboard');
+          const userData = response.data.user;
+          console.log("🚨 EXACT LOGIN DATA FROM BACKEND:", userData);
+          localStorage.setItem('token', response.data.token);
+          localStorage.setItem('user', JSON.stringify(userData));
+          
+          // --- BULLETPROOF ROUTING ---
+          const rId = String(userData.roleid);
+          const rName = (userData.role || '').toLowerCase();
+
+          if (rId === '1' || rName === 'admin') {
+            navigate('/dashboard');
+          } else if (rId === '4' || rName === 'supervisor') {
+            navigate('/supervisor-dashboard');
+          } else if (rId === '2' || rName === 'agent') {
+            navigate('/agent-workspace');
+          } else {
+            // Default to Standard Employee
+            navigate('/my-requests');
+          }
+          // ---------------------------
+
       } else {
         setError('Invalid credentials combination response from server.');
       }
@@ -154,11 +168,9 @@ function Login() {
         style={{ background: 'var(--bg)', fontFamily: 'var(--font-body)' }}
       >
         
-        {/* Ambient glowing shapes */}
         <div className="orb-a" style={{ position: 'fixed', top: '-8%', right: '2%', width: 500, height: 500, background: 'radial-gradient(circle, rgba(79,70,229,.07) 0%, transparent 68%)', borderRadius: '50%', zIndex: 0 }} />
         <div className="orb-b" style={{ position: 'fixed', bottom: '-10%', left: '5%', width: 500, height: 500, background: 'radial-gradient(circle, rgba(14,165,233,.06) 0%, transparent 68%)', borderRadius: '50%', zIndex: 0 }} />
 
-        {/* Main Card Container */}
         <div 
           className="w-full max-w-md fade-up z-10 p-8 md:p-10"
           style={{ 
@@ -169,7 +181,6 @@ function Login() {
           }}
         >
           
-          {/* Header Section */}
           <div className="text-center mb-8">
             <div 
               className="w-12 h-12 flex items-center justify-center mx-auto mb-4 transition-all duration-200"
@@ -191,7 +202,6 @@ function Login() {
             </p>
           </div>
 
-          {/* Action Error Banner */}
           {error && (
             <div className="mb-5 p-3.5 fade-in flex items-center gap-2" style={{ background: 'var(--rose-light)', border: '1px solid #fecdd3', borderRadius: '10px', color: 'var(--rose)', fontSize: 12, fontWeight: 600 }}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--rose)' }} />
@@ -199,7 +209,6 @@ function Login() {
             </div>
           )}
 
-          {/* Action Success Banner */}
           {successMessage && (
             <div className="mb-5 p-3.5 fade-in flex flex-col gap-1" style={{ background: 'var(--emerald-light)', border: '1px solid #bbf7d0', borderRadius: '10px', color: 'var(--emerald)', fontSize: 12, fontWeight: 600 }}>
               <div className="flex items-center gap-2">
@@ -210,9 +219,7 @@ function Login() {
             </div>
           )}
 
-          {/* Conditional Workflow Rendering */}
           {!isForgotPasswordMode ? (
-            /* STANDARD SIGN IN FORM */
             <form onSubmit={handleLoginSubmit} className="space-y-5">
               <div>
                 <label style={{ display: 'block', color: 'var(--txt-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, tracking: '.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Email Address</label>
@@ -262,7 +269,6 @@ function Login() {
               </div>
             </form>
           ) : (
-            /* FORGOT PASSWORD FORM */
             <form onSubmit={handleRecoverySubmit} className="space-y-5 fade-in">
               <div>
                 <label style={{ display: 'block', color: 'var(--txt-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, tracking: '.08em', textTransform: 'uppercase', marginBottom: '6px' }}>Registered Corporate Email</label>
@@ -299,7 +305,6 @@ function Login() {
             </form>
           )}
 
-          {/* Credentials Footer for Testing Environment */}
           {!isForgotPasswordMode && (
             <div className="mt-8 pt-5 text-center text-[11px]" style={{ borderTop: '1px solid var(--border)' }}>
               <p className="mb-2 font-semibold" style={{ color: 'var(--txt-muted)' }}>Corporate Access Environment:</p>
