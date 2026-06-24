@@ -3,7 +3,6 @@ import { useDropzone } from 'react-dropzone';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../services/api';
 
-// --- THE FIX: Safe UTC Date Parser ---
 const parseUtcDate = (dateString) => {
   if (!dateString) return new Date();
   const isoString = dateString.replace(' ', 'T') + (dateString.includes('Z') ? '' : 'Z');
@@ -25,6 +24,7 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
   };
 
+  const [resolutionSteps, setResolutionSteps] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     title: ticket.title || '',
@@ -46,9 +46,6 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = Number(currentUser.id);
 
-  // =========================================================================
-  // --- ROLE CHECKS ---
-  // =========================================================================
   const isStandardUser = ['User', 'user', 'employee'].includes(currentUser.role) || String(currentUser.roleid) === '3';
   const isAgent = ['Agent', 'agent'].includes(currentUser.role) || String(currentUser.roleid) === '2';
   
@@ -68,6 +65,20 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
   const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => { setLocalTicket(ticket); }, [ticket]);
+
+  // Pull the full ticket (incl. the persisted closing/resolution note) when the
+  // modal opens, so the admin sees the agent's note even after a page reload.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const r = await api.get(`/tickets/${ticket.id}`);
+        const fresh = r.data?.data || r.data;
+        if (active && fresh) setLocalTicket(prev => ({ ...prev, ...fresh }));
+      } catch (e) { /* fall back to list data */ }
+    })();
+    return () => { active = false; };
+  }, [ticket.id]);
 
   useEffect(() => {
     if (activeTab === 'workflow') {
@@ -119,7 +130,6 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
     }
   };
 
-  // --- REACT DROPZONE FOR COMMENTS ---
   const onDrop = useCallback(acceptedFiles => {
     setCommentFiles(prevFiles => [...prevFiles, ...acceptedFiles]);
   }, []);
@@ -127,7 +137,7 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
     accept: { 'image/*': ['.jpeg', '.png', '.jpg', '.gif'], 'application/pdf': ['.pdf'] },
-    maxSize: 5242880 // 5MB limit
+    maxSize: 5242880
   });
 
   const removeCommentFile = (indexToRemove) => {
@@ -181,17 +191,60 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
     return { breakdown: summary, total };
   }, [comments]);
 
+  // --- THE FIX: SAVING RESOLUTION STEPS TO LARAVEL ---
   const handleStatusChange = async (newStatusId) => {
     setIsUpdating(true);
     try {
-      await api.put(`/tickets/${ticket.id}`, { statusid: newStatusId });
+      const isResolveOrClose = newStatusId === 3 || newStatusId === 4;
+      const note = (resolutionSteps || '').trim();
+      const payload = {
+        ...editForm,
+        statusid: newStatusId,
+        // Persist the agent's note when RESOLVING or CLOSING (Knowledge Base source)
+        resolution_summary: isResolveOrClose && note ? note : undefined
+      };
+
+      await api.put(`/tickets/${ticket.id}`, payload);
+
       showToast(`Ticket marked as ${newStatusId === 3 ? 'Resolved' : 'Closed'}!`);
-      setLocalTicket({ ...localTicket, statusid: newStatusId });
+
+      // Update local state so the UI reflects the change immediately
+      setLocalTicket({
+        ...localTicket,
+        statusid: newStatusId,
+        resolution_summary: isResolveOrClose && note ? note : localTicket.resolution_summary,
+        resolution_author: isResolveOrClose && note ? (currentUser.name || localTicket.resolution_author) : localTicket.resolution_author,
+        resolution_at: isResolveOrClose && note ? new Date().toISOString() : localTicket.resolution_at
+      });
+      
       if (onSuccess) onSuccess(); 
     } catch (err) {
       showToast("Failed to update status.", "error");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  // --- THE FIX: ADMIN PUBLISH TO KNOWLEDGE BASE ---
+  const handlePublishToKB = async () => {
+    const content = (localTicket.resolution_summary || resolutionSteps || '').trim();
+    if (!content) {
+      showToast("There is no resolution note to publish yet.", "error");
+      return;
+    }
+    try {
+      const payload = {
+        ticket_id: localTicket.id,
+        title: localTicket.title,
+        content,
+        category: localTicket.category_name || "General",
+        author_name: localTicket.resolution_author || localTicket.agent_name || currentUser.name || "System"
+      };
+
+      await api.post('/knowledge-base/publish', payload);
+      showToast("Article successfully published to Knowledge Base!");
+    } catch (err) {
+      showToast("Failed to publish article. Check server connection.", "error");
     }
   };
 
@@ -217,13 +270,36 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
   };
 
   const handleAssign = async () => {
+    if (!selectedAgent) {
+      showToast("Please select an agent from the dropdown first.", "error");
+      return;
+    }
+
     setIsUpdating(true);
     try {
-      await api.put(`/tickets/${ticket.id}`, { agentid: selectedAgent });
+      const payload = {
+        title: localTicket.title,
+        description: localTicket.description,
+        categoryid: localTicket.categoryid || 1,
+        priorityid: localTicket.priorityid || 1,
+        statusid: localTicket.statusid || 1,
+        agentid: selectedAgent,
+        assignedto: selectedAgent,
+        agent_id: selectedAgent
+      };
+
+      await api.put(`/tickets/${ticket.id}`, payload);
       showToast("Ticket assigned successfully!");
       onSuccess();
     } catch (err) {
-      showToast("Failed to assign ticket.", "error");
+      const dbError = err.response?.data?.error;
+      const genericMsg = err.response?.data?.message;
+      let validationMsg = '';
+      if (err.response?.data?.errors) {
+         const firstKey = Object.keys(err.response.data.errors)[0];
+         validationMsg = err.response.data.errors[firstKey][0];
+      }
+      showToast(validationMsg || dbError || genericMsg || "Failed to assign ticket.", "error");
     } finally {
       setIsUpdating(false);
     }
@@ -484,6 +560,32 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
                       {localTicket.description || 'No description provided.'}
                     </div>
 
+                    {/* --- AGENT'S CLOSING NOTE → ADMIN VIEW + PUBLISH TO KB --- */}
+                    {(localTicket.resolution_summary || resolutionSteps) && (
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
+                          <div>
+                            <h4 style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '.1em' }}>Agent's Closing Note</h4>
+                            {(localTicket.resolution_author || localTicket.resolution_at) && (
+                              <p style={{ margin: '4px 0 0', fontSize: 11, color: '#15803d', fontWeight: 600 }}>
+                                {localTicket.resolution_author ? `by ${localTicket.resolution_author}` : ''}
+                                {localTicket.resolution_author && localTicket.resolution_at ? ' • ' : ''}
+                                {localTicket.resolution_at ? formatDate(localTicket.resolution_at) : ''}
+                              </p>
+                            )}
+                          </div>
+                          {isManager && (
+                            <button onClick={handlePublishToKB} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(22,163,74,0.3)' }}>
+                              📚 Publish to Knowledge Base
+                            </button>
+                          )}
+                        </div>
+                        <p style={{ fontSize: 14, color: '#065f46', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                          {localTicket.resolution_summary || resolutionSteps}
+                        </p>
+                      </div>
+                    )}
+
                     <div style={{ border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, overflow: 'hidden' }}>
                       {[
                         { label: 'Category', value: localTicket.category_name || `Category ${localTicket.categoryid || 'Unknown'}` },
@@ -581,7 +683,6 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
                           style={{ width: '100%', height: 80, padding: 16, borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none', resize: 'vertical', color: '#0f172a', backgroundColor: '#ffffff', fontWeight: 500 }} 
                         />
                         
-                        {/* --- THE FIX: NEW DROPZONE UPLOAD FOR COMMENTS --- */}
                         <div style={{ marginBottom: 4 }}>
                           <div 
                             {...getRootProps()} 
@@ -696,7 +797,6 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
             </>
           )}
 
-          {/* DYNAMIC ROLE-AWARE FOOTER */}
           <div style={{ padding: '20px 30px', background: '#f8fafc', borderTop: '1px solid var(--border, #e2e8f0)', display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
             {isEditing ? (
                <>
@@ -745,7 +845,6 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
 
                         {sId !== 4 && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {/* --- THE FIX: ADDED COLOR AND BACKGROUND COLOR TO INPUT --- */}
                             <input type="text" placeholder="e.g., 1h 30m or 45m" value={timeInput} onChange={(e) => setTimeInput(e.target.value)} style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none', color: '#0f172a', backgroundColor: '#ffffff' }} />
                             <button onClick={submitTimeLog} disabled={isUpdating || !timeInput.trim()} style={{ width: '100%', background: 'var(--accent)', color: '#fff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: isUpdating || !timeInput.trim() ? 'not-allowed' : 'pointer' }}>
                               {isUpdating ? 'Saving...' : 'Add Time Record'}
@@ -786,7 +885,6 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
         </div>
       </div>
 
-      {/* --- CONFIRMATION OVERLAYS --- */}
       {showCancelConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 10 }}>
           <div className="modal-panel fade-up" style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 20, padding: '30px', width: '100%', maxWidth: 400, textAlign: 'center', boxShadow: '0 32px 80px rgba(15,23,42,0.2)' }}>
@@ -817,13 +915,35 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
 
       {showResolveConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 10 }}>
-          <div className="modal-panel fade-up" style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 20, padding: '30px', width: '100%', maxWidth: 400, textAlign: 'center', boxShadow: '0 32px 80px rgba(15,23,42,0.2)' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 26 }}>✓</div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Resolve Ticket?</h3>
-            <p style={{ margin: '0 0 24px', fontSize: 13, color: '#475569', lineHeight: 1.6 }}>Are you sure you want to mark <strong>{localTicket.referenceno || `TKT-00${localTicket.id}`}</strong> as resolved?</p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div className="modal-panel fade-up" style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 20, padding: '30px', width: '100%', maxWidth: 500, boxShadow: '0 32px 80px rgba(15,23,42,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+              <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>✓</div>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Resolve Ticket?</h3>
+                <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>Mark <strong>{tNum}</strong> as resolved.</p>
+              </div>
+            </div>
+            
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8 }}>How did you solve this? (Optional, for Knowledge Base)</label>
+              <textarea 
+                placeholder="Step 1: Restarted the router...&#10;Step 2: Cleared DNS cache..." 
+                value={resolutionSteps}
+                onChange={(e) => setResolutionSteps(e.target.value)}
+                style={{ width: '100%', minHeight: 100, padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none', resize: 'vertical', color: '#0f172a', backgroundColor: '#f8fafc' }} 
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setShowResolveConfirm(false)} disabled={isUpdating} style={{ padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: '#ffffff', border: '1px solid #cbd5e1', color: '#0f172a' }}>Cancel</button>
-              <button type="button" onClick={() => { setShowResolveConfirm(false); handleStatusChange(3); }} disabled={isUpdating} style={{ padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: isUpdating ? 'not-allowed' : 'pointer', background: '#16a34a', border: 'none', color: '#ffffff', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}>{isUpdating ? 'Updating...' : 'Yes, Resolve'}</button>
+              <button type="button" onClick={() => { 
+                  setShowResolveConfirm(false); 
+                  handleStatusChange(3); 
+                }} 
+                disabled={isUpdating} style={{ padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: isUpdating ? 'not-allowed' : 'pointer', background: '#16a34a', border: 'none', color: '#ffffff', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}
+              >
+                {isUpdating ? 'Updating...' : 'Mark as Resolved'}
+              </button>
             </div>
           </div>
         </div>
@@ -831,11 +951,26 @@ export default function TicketModal({ ticket, onClose, onSuccess }) {
 
       {showCloseConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 10 }}>
-          <div className="modal-panel fade-up" style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 20, padding: '30px', width: '100%', maxWidth: 400, textAlign: 'center', boxShadow: '0 32px 80px rgba(15,23,42,0.2)' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#f1f5f9', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: 26 }}>🔒</div>
-            <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Close Ticket?</h3>
-            <p style={{ margin: '0 0 24px', fontSize: 13, color: '#475569', lineHeight: 1.6 }}>Are you sure you want to officially close <strong>{localTicket.referenceno || `TKT-00${localTicket.id}`}</strong>? This action signifies the issue is completely finished.</p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div className="modal-panel fade-up" style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 20, padding: '30px', width: '100%', maxWidth: 500, boxShadow: '0 32px 80px rgba(15,23,42,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+              <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#f1f5f9', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>🔒</div>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Close Ticket?</h3>
+                <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>Officially close <strong>{tNum}</strong> — the issue is finished.</p>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8 }}>Closing note — how was this solved? <span style={{ color: '#94a3b8', fontWeight: 600 }}>(Shown to the admin & can be added to the Knowledge Base)</span></label>
+              <textarea
+                placeholder="Step 1: Restarted the service...&#10;Step 2: Cleared the cache..."
+                value={resolutionSteps}
+                onChange={(e) => setResolutionSteps(e.target.value)}
+                style={{ width: '100%', minHeight: 110, padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none', resize: 'vertical', color: '#0f172a', backgroundColor: '#f8fafc' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setShowCloseConfirm(false)} disabled={isUpdating} style={{ padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: '#ffffff', border: '1px solid #cbd5e1', color: '#0f172a' }}>Cancel</button>
               <button type="button" onClick={() => { setShowCloseConfirm(false); handleStatusChange(4); }} disabled={isUpdating} style={{ padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: isUpdating ? 'not-allowed' : 'pointer', background: '#475569', border: 'none', color: '#ffffff', boxShadow: '0 4px 14px rgba(71,85,105,0.3)' }}>{isUpdating ? 'Updating...' : 'Yes, Close'}</button>
             </div>

@@ -6,6 +6,8 @@ use App\Http\Controllers\API\DashboardController;
 use App\Http\Controllers\API\TicketController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\NotificationController;
+use App\Http\Controllers\API\AnalyticsController;
+use App\Http\Controllers\API\KnowledgeBaseController;
 
 // ==================== PUBLIC ROUTES ====================
 Route::post('/login', [AuthController::class, 'login']);
@@ -70,6 +72,10 @@ Route::middleware('auth:api')->group(function () {
     Route::put('/users/{id}/toggle-active', [AuthController::class, 'toggleActive']);
     Route::post('/users/{id}/unlock', [AuthController::class, 'unlockAccount']);
     Route::get('/supervisor/agents', [UserController::class, 'getSupervisorAgents']);
+
+    Route::get('/analytics', [AnalyticsController::class, 'getDashboardAnalytics']);
+    Route::get('/knowledge-base', [KnowledgeBaseController::class, 'index']);
+    Route::post('/knowledge-base/publish', [KnowledgeBaseController::class, 'publish']);
 
     
 });

@@ -114,6 +114,20 @@ class TicketController extends Controller
             ];
         })->toArray();
 
+        // --- Surface the agent's closing / resolution note for the admin view ---
+        // Stored in internal_notes with a [[RESOLUTION]] marker (see update()).
+        $resNote = DB::table('internal_notes')
+            ->where('ticket_id', $id)
+            ->where('note', 'like', '[[RESOLUTION]]%')
+            ->orderBy('id', 'desc')
+            ->first();
+        if ($resNote) {
+            $resAuthor = DB::table('users')->where('id', $resNote->user_id)->first();
+            $ticket->resolution_summary = trim(preg_replace('/^\[\[RESOLUTION\]\]\s*/', '', $resNote->note));
+            $ticket->resolution_author  = $resAuthor->fullname ?? null;
+            $ticket->resolution_at      = $resNote->created_at;
+        }
+
         return response()->json($ticket);
     }
 
@@ -212,7 +226,20 @@ class TicketController extends Controller
             DB::table('tickets')->where('id', $id)->update($updateData);
 
             $user = $request->user();
-            
+
+            // --- Persist the agent's closing / resolution note (Knowledge Base source) ---
+            // The tickets table has no resolution column, so we store the write-up in
+            // internal_notes with a [[RESOLUTION]] marker. show() reads the latest one
+            // back as the ticket's resolution_summary for the admin view.
+            if ($request->filled('resolution_summary')) {
+                DB::table('internal_notes')->insert([
+                    'ticket_id'  => $id,
+                    'user_id'    => $user->id,
+                    'note'       => '[[RESOLUTION]] ' . $request->resolution_summary,
+                    'created_at' => now(),
+                ]);
+            }
+
             // Log the activity
             DB::table('activity_logs')->insert([
                 'user_id'     => $user->id,

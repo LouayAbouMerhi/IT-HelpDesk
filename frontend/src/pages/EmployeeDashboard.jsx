@@ -187,37 +187,47 @@ export default function EmployeeDashboard() {
         {/* MAIN CONTENT */}
         <main style={{ marginLeft: 252, flex: 1, padding: '40px', maxWidth: 1200 }}>
           
-          <div className="fade-up" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 30, flexWrap: 'wrap', gap: 20 }}>
-            <div>
-              <h1 style={{ margin: '0 0 8px', fontSize: 28, fontWeight: 800, color: '#0f172a' }}>
-                {viewMode === 'mine' ? `Welcome back, ${currentUser.name?.split(' ')[0]}!` : 'Company Requests'}
-              </h1>
-              <p style={{ margin: 0, fontSize: 14, color: '#64748b' }}>
-                {viewMode === 'mine' ? 'Track your IT requests or submit a new issue to the team.' : 'View all active and historical tickets across the organization.'}
-              </p>
+          <div className="fade-up" style={{ position: 'relative', overflow: 'hidden', borderRadius: 22, padding: '28px 32px', marginBottom: 30, background: 'linear-gradient(120deg,#0284c7,#0ea5e9 55%,#38bdf8)', boxShadow: '0 22px 50px -26px rgba(2,132,199,.7)' }}>
+            <div style={{ position: 'absolute', top: -60, right: -30, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,.13)' }} />
+            <div style={{ position: 'absolute', bottom: -80, right: 160, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,.09)' }} />
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', flexShrink: 0, fontSize: 26 }}>{viewMode === 'mine' ? '👋' : '🏢'}</div>
+                <div>
+                  <h1 style={{ margin: '0 0 6px', fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: '-.4px' }}>
+                    {viewMode === 'mine' ? `Welcome back, ${currentUser.name?.split(' ')[0]}!` : 'Company Requests'}
+                  </h1>
+                  <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,.9)' }}>
+                    {viewMode === 'mine' ? 'Track your IT requests or submit a new issue to the team.' : 'View all active and historical tickets across the organization.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                style={{ padding: '13px 24px', background: '#fff', color: '#0284c7', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 10px 24px rgba(2,132,199,.28)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', gap: 8 }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Submit New Request
+              </button>
             </div>
-            <button 
-              onClick={() => setIsCreateModalOpen(true)}
-              style={{ padding: '12px 24px', background: 'var(--accent, #4f46e5)', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 8px 20px rgba(79,70,229,.25)', transition: 'transform 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              + Submit New Request
-            </button>
           </div>
 
-          <div className="fade-up" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 30, animationDelay: '0.1s' }}>
-            <div style={{ background: '#fff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.1em' }}>Open Requests</p>
-              <h2 style={{ margin: 0, fontSize: 36, fontWeight: 800, color: '#0f172a' }}>{openCount}</h2>
+          <div className="fade-up stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 30, animationDelay: '0.1s' }}>
+            <div className="stat-card" style={{ background: '#fff', padding: 24, borderRadius: 16, border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg,#0284c7,#38bdf8)' }} />
+              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: 'var(--txt-muted)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Open Requests</p>
+              <h2 style={{ margin: 0, fontSize: 36, fontWeight: 800, color: 'var(--txt-primary)' }}>{openCount}</h2>
             </div>
-            <div style={{ background: '#fff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.1em' }}>Resolved / Closed</p>
-              <h2 style={{ margin: 0, fontSize: 36, fontWeight: 800, color: '#0f172a' }}>{resolvedCount}</h2>
+            <div className="stat-card" style={{ background: '#fff', padding: 24, borderRadius: 16, border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg,#10b981,#34d399)' }} />
+              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: 'var(--txt-muted)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Resolved / Closed</p>
+              <h2 style={{ margin: 0, fontSize: 36, fontWeight: 800, color: 'var(--txt-primary)' }}>{resolvedCount}</h2>
             </div>
-            <div style={{ background: '#fff', padding: 24, borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.1em' }}>Total Submissions</p>
-              <h2 style={{ margin: 0, fontSize: 36, fontWeight: 800, color: '#0f172a' }}>{tickets.length}</h2>
+            <div className="stat-card" style={{ background: '#fff', padding: 24, borderRadius: 16, border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'linear-gradient(90deg,#6366f1,#818cf8)' }} />
+              <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: 'var(--txt-muted)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Total Submissions</p>
+              <h2 style={{ margin: 0, fontSize: 36, fontWeight: 800, color: 'var(--txt-primary)' }}>{tickets.length}</h2>
             </div>
           </div>
 

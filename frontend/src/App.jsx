@@ -11,7 +11,9 @@ import ActivityLogs from './pages/ActivityLogs';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import AgentDashboard from './pages/AgentDashboard'; 
 import SupervisorDashboard from './pages/SupervisorDashboard';
-
+import Analytics from './pages/Analytics';
+import KnowledgeBase from './pages/KnowledgeBase';
+import ErrorBoundary from './components/ErrorBoundary';
 // Route Guard to prevent unauthorized access
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -57,6 +59,7 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans antialiased">
+        <ErrorBoundary>
         <Routes>
           {/* Public Authentication Path */}
           <Route 
@@ -146,9 +149,13 @@ function App() {
             } 
           />
 
+          <Route path="/analytics" element={<Analytics />} />
+  <Route path="/knowledge-base" element={<KnowledgeBase />} />
+
           {/* Catch-all Fallback Navigation Redirect */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </ErrorBoundary>
       </div>
     </Router>
   );

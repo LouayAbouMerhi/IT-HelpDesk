@@ -52,16 +52,16 @@ class AuthController extends Controller
             'updatedat' => now(),
         ]);
 
-        // Insert log using strict lowercase table and columns
-        DB::table('activitylogs')->insert([
-            'userid' => $userId,
+        // Audit trail — write to the SAME table the audit log reads (activity_logs)
+        DB::table('activity_logs')->insert([
+            'user_id' => $userId,
             'action' => 'user_registered',
-            'entitytype' => 'User',
-            'entityid' => $userId,
-            'newvalue' => json_encode(['email' => $request->email, 'roleid' => 3]),
-            'ipaddress' => $request->ip(),
-            'useragent' => $request->userAgent(),
-            'createdat' => now(),
+            'entity_type' => 'User',
+            'entity_id' => $userId,
+            'new_value' => json_encode(['email' => $request->email, 'roleid' => 3]),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
         ]);
 
         $user = User::find($userId);
@@ -131,27 +131,29 @@ class AuthController extends Controller
                     'is_locked' => $lockAccount
                 ]);
 
-                DB::table('activitylogs')->insert([
-                    'userid' => $user->id,
+                DB::table('activity_logs')->insert([
+                    'user_id' => $user->id,
                     'action' => $lockAccount ? 'account_locked' : 'login_failed',
-                    'entitytype' => 'User',
-                    'oldvalue' => json_encode(['email' => $request->email, 'attempt' => $attempts]),
-                    'ipaddress' => $request->ip(),
-                    'useragent' => $request->userAgent(),
-                    'createdat' => now(),
+                    'entity_type' => 'User',
+                    'entity_id' => $user->id,
+                    'new_value' => json_encode(['email' => $request->email, 'attempt' => $attempts]),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'created_at' => now(),
                 ]);
 
                 throw ValidationException::withMessages([
                     'password' => ["The provided credentials are incorrect. Attempt $attempts of 5."],
                 ]);
             } else {
-                DB::table('activitylogs')->insert([
-                    'userid' => $user->id,
+                DB::table('activity_logs')->insert([
+                    'user_id' => $user->id,
                     'action' => 'admin_login_failed',
-                    'entitytype' => 'User',
-                    'ipaddress' => $request->ip(),
-                    'useragent' => $request->userAgent(),
-                    'createdat' => now(),
+                    'entity_type' => 'User',
+                    'entity_id' => $user->id,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'created_at' => now(),
                 ]);
 
                 throw ValidationException::withMessages([
@@ -177,14 +179,14 @@ class AuthController extends Controller
             default => 'employee'
         };
 
-        DB::table('activitylogs')->insert([
-            'userid' => $user->id,
+        DB::table('activity_logs')->insert([
+            'user_id' => $user->id,
             'action' => 'user_login',
-            'entitytype' => 'User',
-            'entityid' => $user->id,
-            'ipaddress' => $request->ip(),
-            'useragent' => $request->userAgent(),
-            'createdat' => now(),
+            'entity_type' => 'User',
+            'entity_id' => $user->id,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
         ]);
 
         return response()->json([
@@ -209,14 +211,14 @@ class AuthController extends Controller
         $user = $request->user();
         
         if ($user) {
-            DB::table('activitylogs')->insert([
-                'userid' => $user->id,
+            DB::table('activity_logs')->insert([
+                'user_id' => $user->id,
                 'action' => 'user_logout',
-                'entitytype' => 'User',
-                'entityid' => $user->id,
-                'ipaddress' => $request->ip(),
-                'useragent' => $request->userAgent(),
-                'createdat' => now(),
+                'entity_type' => 'User',
+                'entity_id' => $user->id,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'created_at' => now(),
             ]);
             
             Auth::guard('api')->logout();
@@ -352,15 +354,15 @@ class AuthController extends Controller
 
         DB::table('users')->where('id', $user->id)->update($updates);
 
-        DB::table('activitylogs')->insert([
-            'userid' => $user->id,
+        DB::table('activity_logs')->insert([
+            'user_id' => $user->id,
             'action' => 'profile_updated',
-            'entitytype' => 'User',
-            'entityid' => $user->id,
-            'newvalue' => json_encode(array_keys($request->except(['current_password', 'new_password', 'new_password_confirmation']))),
-            'ipaddress' => $request->ip(),
-            'useragent' => $request->userAgent(),
-            'createdat' => now(),
+            'entity_type' => 'User',
+            'entity_id' => $user->id,
+            'new_value' => json_encode(array_keys($request->except(['current_password', 'new_password', 'new_password_confirmation']))),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
         ]);
 
         return response()->json(['message' => 'Profile updated successfully']);
@@ -390,14 +392,14 @@ class AuthController extends Controller
             'updatedat' => now()
         ]);
 
-        DB::table('activitylogs')->insert([
-            'userid' => $user->id,
+        DB::table('activity_logs')->insert([
+            'user_id' => $user->id,
             'action' => 'password_changed',
-            'entitytype' => 'User',
-            'entityid' => $user->id,
-            'ipaddress' => $request->ip(),
-            'useragent' => $request->userAgent(),
-            'createdat' => now(),
+            'entity_type' => 'User',
+            'entity_id' => $user->id,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'created_at' => now(),
         ]);
 
         return response()->json(['message' => 'Password changed successfully']);

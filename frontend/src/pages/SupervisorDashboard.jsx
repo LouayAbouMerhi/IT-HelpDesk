@@ -160,7 +160,7 @@ export default function SupervisorDashboard() {
       )}
 
       <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', position: 'relative', overflow: 'hidden', fontFamily: 'var(--font-body)' }}>
-        <div className="orb-a" style={{ position: 'fixed', top: '-8%', right: '2%', width: 640, height: 640, background: 'radial-gradient(circle, rgba(79,70,229,.07) 0%, transparent 68%)', borderRadius: '50%', zIndex: 0 }} />
+        <div className="orb-a" style={{ position: 'fixed', top: '-8%', right: '2%', width: 640, height: 640, background: 'radial-gradient(circle, rgba(14,165,233,.09) 0%, transparent 68%)', borderRadius: '50%', zIndex: 0 }} />
         <div className="orb-b" style={{ position: 'fixed', bottom: '-10%', left: '5%', width: 560, height: 560, background: 'radial-gradient(circle, rgba(14,165,233,.06) 0%, transparent 68%)', borderRadius: '50%', zIndex: 0 }} />
 
         {/* --- DESKTOP SIDEBAR --- */}
@@ -225,7 +225,7 @@ export default function SupervisorDashboard() {
         <main className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1, marginLeft: 252 }}>
           
           {/* HEADER IS SHARED ACROSS ALL TABS */}
-          <header className="dash-header" style={{ position: 'sticky', top: 0, zIndex: 15, background: 'rgba(244,246,251,.88)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)', padding: '12px 30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 0 var(--border)' }}>
+          <header className="dash-header" style={{ position: 'sticky', top: 0, zIndex: 15, background: 'rgba(243,249,255,.88)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)', padding: '12px 30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 0 var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
               <div className="search-wrap" style={{ position: 'relative', width: 240 }}>
                 <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-muted)', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
@@ -271,13 +271,35 @@ export default function SupervisorDashboard() {
             {/* ========================================= */}
             {activeTab === 'overview' && (
               <div className="fade-up">
-                <div style={{ marginBottom: 24 }}>
-                  <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--txt-primary)', letterSpacing: '-.5px', margin: '0 0 4px' }}>Department Overview</h1>
+                {/* HERO BANNER */}
+                <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 22, padding: '26px 30px', marginBottom: 24, background: 'linear-gradient(120deg,#0284c7,#0ea5e9 55%,#38bdf8)', boxShadow: '0 22px 50px -26px rgba(2,132,199,.7)' }}>
+                  <div style={{ position: 'absolute', top: -60, right: -30, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,.13)' }} />
+                  <div style={{ position: 'absolute', bottom: -80, right: 150, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,.09)' }} />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', flexShrink: 0, fontSize: 26 }}>📊</div>
+                      <div>
+                        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.16em', textTransform: 'uppercase', margin: '0 0 5px' }}>Welcome back, {user.name.split(' ')[0]}</p>
+                        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: '-.5px', margin: 0 }}>Department Overview</h1>
+                        <p style={{ color: 'rgba(255,255,255,.9)', fontSize: 13, margin: '5px 0 0' }}>Monitor your category pipeline and team workload.</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ textAlign: 'center', background: 'rgba(255,255,255,.16)', borderRadius: 14, padding: '12px 18px', backdropFilter: 'blur(6px)' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{stats.openTickets || 0}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.1em', textTransform: 'uppercase', marginTop: 4 }}>Open</div>
+                      </div>
+                      <div style={{ textAlign: 'center', background: 'rgba(255,255,255,.16)', borderRadius: 14, padding: '12px 18px', backdropFilter: 'blur(6px)' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{stats.activeAgents || 0}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.1em', textTransform: 'uppercase', marginTop: 4 }}>Agents</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="stats-grid" style={{ marginBottom: 22, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
                   {[
-                    { title: 'Category Total', value: safeTickets.length, icon: '⊟', grad: 'linear-gradient(135deg,#4f46e5,#7c73f0)', glow: 'rgba(79,70,229,.2)' },
+                    { title: 'Category Total', value: safeTickets.length, icon: '⊟', grad: 'linear-gradient(135deg,#0284c7,#38bdf8)', glow: 'rgba(14,165,233,.2)' },
                     { title: 'In Evaluation', value: stats.inProgress || 0, icon: '⌛', grad: 'linear-gradient(135deg,#f59e0b,#fb923c)', glow: 'rgba(245,158,11,.2)' },
                     { title: 'Resolved Today', value: stats.resolvedToday || 0, icon: '✓', grad: 'linear-gradient(135deg,#10b981,#06b6d4)', glow: 'rgba(16,185,129,.2)' },
                     { title: 'Active Agents', value: stats.activeAgents || 0, icon: '◉', grad: 'linear-gradient(135deg,#0ea5e9,#6366f1)', glow: 'rgba(14,165,233,.2)' },

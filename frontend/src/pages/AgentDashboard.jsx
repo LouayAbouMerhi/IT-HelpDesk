@@ -125,7 +125,45 @@ export default function AgentDashboard() {
 
   const handleLogout = () => { localStorage.clear(); window.location.href = '/login'; };
   const timeline = getTimeline();
-  const formatAction = (action) => action.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+  // Human-friendly labels for the audited actions an agent performs.
+  const ACTION_LABELS = {
+    ticket_created: 'Created a ticket',
+    ticket_updated: 'Updated a ticket',
+    ticket_status_changed: 'Changed ticket status',
+    ticket_resolved: 'Resolved a ticket',
+    ticket_closed: 'Closed a ticket',
+    ticket_reassigned: 'Reassigned a ticket',
+    ticket_escalated: 'Escalated a ticket',
+    ticket_assigned: 'Assigned a ticket',
+    internal_note_added: 'Added an internal note',
+    comment_added: 'Added a comment',
+    attachment_uploaded: 'Uploaded an attachment',
+    user_login: 'Signed in',
+    user_logout: 'Signed out',
+    password_changed: 'Changed password',
+    profile_updated: 'Updated profile',
+  };
+  const formatAction = (action) => {
+    if (!action) return 'Activity';
+    return ACTION_LABELS[action] ||
+      action.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+
+  // Laravel's query builder returns timestamps as "YYYY-MM-DD HH:MM:SS" (space,
+  // no timezone) which Safari/Firefox parse as Invalid Date. Normalise first.
+  const safeDateTime = (raw) => {
+    if (!raw) return '—';
+    const d = new Date(typeof raw === 'string' ? raw.replace(' ', 'T') : raw);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  const ticketRef = (log) => {
+    const id = log.entity_id ?? log.entityid;
+    const type = log.entity_type ?? log.entitytype;
+    if (!id || (type && type !== 'Ticket')) return null;
+    return `TKT-${String(id).padStart(5, '0')}`;
+  };
 
   if (loading) return (
     <>
@@ -211,7 +249,7 @@ export default function AgentDashboard() {
         {/* --- MAIN CONTENT --- */}
         <main className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1, marginLeft: 252 }}>
           
-          <header className="dash-header" style={{ position: 'sticky', top: 0, zIndex: 15, background: 'rgba(244,246,251,.88)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)', padding: '12px 30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 0 var(--border)' }}>
+          <header className="dash-header" style={{ position: 'sticky', top: 0, zIndex: 15, background: 'rgba(243,249,255,.88)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)', padding: '12px 30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 0 var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
               <div className="search-wrap" style={{ position: 'relative', width: 240 }}>
                 <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-muted)', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
@@ -260,9 +298,30 @@ export default function AgentDashboard() {
             {/* ========================================= */}
             {activeTab === 'overview' && (
               <div className="fade-up">
-                <div style={{ marginBottom: 24 }}>
-                  <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--txt-primary)', letterSpacing: '-.5px', margin: '0 0 4px' }}>Welcome back, {user.name.split(' ')[0]}</h1>
-                  <p style={{ fontSize: 14, color: 'var(--txt-muted)', margin: 0 }}>Here is the current state of your ticket queue.</p>
+                {/* HERO BANNER */}
+                <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 22, padding: '26px 30px', marginBottom: 24, background: 'linear-gradient(120deg,#0284c7,#0ea5e9 55%,#38bdf8)', boxShadow: '0 22px 50px -26px rgba(2,132,199,.7)' }}>
+                  <div style={{ position: 'absolute', top: -60, right: -30, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255,255,255,.13)' }} />
+                  <div style={{ position: 'absolute', bottom: -80, right: 150, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,.09)' }} />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 56, height: 56, borderRadius: 16, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', flexShrink: 0, fontSize: 26 }}>🎧</div>
+                      <div>
+                        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.16em', textTransform: 'uppercase', margin: '0 0 5px' }}>Welcome back, {user.name.split(' ')[0]}</p>
+                        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: '-.5px', margin: 0 }}>My Workspace</h1>
+                        <p style={{ color: 'rgba(255,255,255,.9)', fontSize: 13, margin: '5px 0 0' }}>Here is the current state of your ticket queue.</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ textAlign: 'center', background: 'rgba(255,255,255,.16)', borderRadius: 14, padding: '12px 18px', backdropFilter: 'blur(6px)' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{stats.activeTickets}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.1em', textTransform: 'uppercase', marginTop: 4 }}>Active</div>
+                      </div>
+                      <div style={{ textAlign: 'center', background: 'rgba(255,255,255,.16)', borderRadius: 14, padding: '12px 18px', backdropFilter: 'blur(6px)' }}>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{stats.resolvedToday || 0}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.85)', letterSpacing: '.1em', textTransform: 'uppercase', marginTop: 4 }}>Resolved</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="stats-grid" style={{ marginBottom: 22, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
@@ -366,11 +425,15 @@ export default function AgentDashboard() {
                       {recentLogs.length === 0 ? (
                          <p style={{ fontSize: 13, color: 'var(--txt-muted)', textAlign: 'center', margin: '20px 0' }}>No recent activity.</p>
                       ) : recentLogs.slice(0, 10).map((log, index) => {
-                        const logDate = new Date(log.created_at || log.createdat).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                        const logDate = safeDateTime(log.created_at || log.createdat);
+                        const ref = ticketRef(log);
                         return (
-                          <div key={index} style={{ position: 'relative', paddingLeft: 16, borderLeft: '2px solid var(--border)', paddingBottom: 16 }}>
+                          <div key={log.id ?? index} style={{ position: 'relative', paddingLeft: 16, borderLeft: '2px solid var(--border)', paddingBottom: 16 }}>
                             <div style={{ position: 'absolute', left: -5, top: 4, width: 8, height: 8, borderRadius: '50%', background: 'var(--sky)', border: '2px solid #fff' }} />
-                            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--txt-primary)' }}>{formatAction(log.action || 'system_event')}</p>
+                            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--txt-primary)' }}>
+                              {formatAction(log.action)}
+                              {ref && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--sky)' }}> · {ref}</span>}
+                            </p>
                             <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--txt-muted)' }}>{logDate}</p>
                           </div>
                         );
